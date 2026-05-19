@@ -1,0 +1,27 @@
+## Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+## Build results
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww]in32/
+[Ww]in64/
+
+## .NET
+project.lock.json
+*.nuget.props
+*.nuget.targets
+
+## Misc
+*.Cache
+*.log
+*.tmp
