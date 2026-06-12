@@ -64,16 +64,7 @@ public partial class MainViewModel : ObservableObject
     public PlotModel PlotModel { get; }
     private readonly Dictionary<string, LineSeries> _seriesMap = new();
 
-    private readonly List<TagConfig> _tagConfigs = new()
-    {
-        new() { Name = "主电机温度", Address = 0,  NodeId = "ns=2;s=Temperature1", Unit = "℃",  HighLimit = 80,  LowLimit = 0,  Scale = 0.1 },
-        new() { Name = "冷却水温度", Address = 1,  NodeId = "ns=2;s=Temperature2", Unit = "℃",  HighLimit = 35,  LowLimit = 5,  Scale = 0.1 },
-        new() { Name = "管道压力",   Address = 2,  NodeId = "ns=2;s=Pressure1",   Unit = "MPa", HighLimit = 1.6, LowLimit = 0.1, Scale = 0.001 },
-        new() { Name = "电机转速",   Address = 3,  NodeId = "ns=2;s=Speed1",      Unit = "rpm", HighLimit = 1500, LowLimit = 10, Scale = 1.0 },
-        new() { Name = "流量",       Address = 4,  NodeId = "ns=2;s=Flow1",       Unit = "m³/h", HighLimit = 50, LowLimit = 2,   Scale = 0.01 },
-        new() { Name = "液位",       Address = 5,  NodeId = "ns=2;s=Level1",      Unit = "m",   HighLimit = 4.5, LowLimit = 0.5, Scale = 0.001 },
-        new() { Name = "阀门开度",   Address = 6,  NodeId = "ns=2;s=Valve1",      Unit = "%",   HighLimit = 100, LowLimit = 0,   Scale = 0.1 },
-    };
+    private readonly List<TagConfig> _tagConfigs = TagConfigLoader.Load();
 
     public MainViewModel(ModbusService modbusDriver, OpcUaDriver opcUaDriver)
     {
