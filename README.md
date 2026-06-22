@@ -1,4 +1,4 @@
-# ModbusDAQ
+# IndustrialDAQ
 
 基于 WPF 的工业数据采集与监控（SCADA/DAQ）桌面应用，支持 **Modbus TCP**、**Modbus RTU** 和 **OPC UA** 三种工业协议，具备实时监控、报警检测、历史记录与数据导出功能。
 

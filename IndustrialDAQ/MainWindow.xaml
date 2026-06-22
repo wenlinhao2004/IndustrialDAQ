@@ -4,7 +4,7 @@
         xmlns:oxy="http://oxyplot.org/wpf"
         xmlns:vm="clr-namespace:ModbusDAQ.ViewModels"
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
-        Title="工业设备数据采集监控系统 (Modbus TCP/RTU | OPC UA)" Height="780" Width="1300"
+        Title="工业设备数据采集监控系统 (Modbus TCP/RTU | OPC UA | S7)" Height="780" Width="1300"
         WindowStartupLocation="CenterScreen"
         Closing="Window_Closing">
 
@@ -26,6 +26,7 @@
                     <ComboBoxItem Content="TCP"/>
                     <ComboBoxItem Content="RTU"/>
                     <ComboBoxItem Content="OPC UA"/>
+                    <ComboBoxItem Content="S7"/>
                 </ComboBox>
 
                 <!-- TCP 配置 -->
@@ -50,6 +51,7 @@
                 <TextBlock Text="端点:" VerticalAlignment="Center" FontSize="13" Margin="0,0,6,0"/>
                 <TextBox Text="{Binding OpcUaEndpointUrl}" Width="200" VerticalAlignment="Center"
                          Margin="0,0,12,0" FontSize="13" Padding="4"/>
+
 
                 <TextBlock Text="间隔(ms):" VerticalAlignment="Center" FontSize="13" Margin="0,0,4,0"/>
                 <TextBox Text="{Binding LogIntervalText}" Width="60" VerticalAlignment="Center"

@@ -15,11 +15,15 @@
     <PackageReference Include="NModbus4" Version="3.0.0-alpha2" />
     <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua" Version="1.5.374.158" />
     <PackageReference Include="OxyPlot.Wpf" Version="2.2.0" />
+    <PackageReference Include="S7NetPlus" Version="0.20.0" />
     <PackageReference Include="System.IO.Ports" Version="10.0.7" />
   </ItemGroup>
 
   <ItemGroup>
     <None Update="tagconfigs.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

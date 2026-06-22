@@ -15,6 +15,7 @@ public partial class MainViewModel : ObservableObject
 {
     private readonly ModbusService _modbusDriver;
     private readonly OpcUaDriver _opcUaDriver;
+    private readonly S7Driver _s7Driver;
     private IDeviceDriver? _currentDriver;
     private readonly AlarmService _alarm = new();
     private readonly SerialPortService _serialPort = new();
@@ -44,7 +45,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _pipelineStatus = "未启动";
     [ObservableProperty] private int _queueSize;
 
-    // 连接模式: 0=TCP, 1=RTU, 2=OPC UA
+    // 连接模式: 0=TCP, 1=RTU, 2=OPC UA, 3=S7
     [ObservableProperty] private int _selectedMode;
 
     public ObservableCollection<TagViewModel> Tags { get; } = new();
@@ -66,10 +67,11 @@ public partial class MainViewModel : ObservableObject
 
     private readonly List<TagConfig> _tagConfigs = TagConfigLoader.Load();
 
-    public MainViewModel(ModbusService modbusDriver, OpcUaDriver opcUaDriver)
+    public MainViewModel(ModbusService modbusDriver, OpcUaDriver opcUaDriver, S7Driver s7Driver)
     {
         _modbusDriver = modbusDriver;
         _opcUaDriver = opcUaDriver;
+        _s7Driver = s7Driver;
 
         // 加载用户配置
         _settings = SettingsService.Load();
@@ -150,6 +152,7 @@ public partial class MainViewModel : ObservableObject
             0 => "TCP 连接",
             1 => "RTU 连接",
             2 => "OPC UA 连接",
+            3 => "S7 连接",
             _ => "连接"
         };
     }
@@ -165,6 +168,7 @@ public partial class MainViewModel : ObservableObject
         {
             0 or 1 => (IDeviceDriver)_modbusDriver,
             2 => _opcUaDriver,
+            3 => _s7Driver,
             _ => throw new InvalidOperationException("未知连接模式")
         };
 
@@ -186,7 +190,15 @@ public partial class MainViewModel : ObservableObject
             },
             2 => new Dictionary<string, object>
             {
-                { "EndpointUrl", OpcUaEndpointUrl }
+                { "EndpointUrl", OpcUaEndpointUrl },
+                { "Username", _settings.OpcUaUsername },
+                { "Password", _settings.OpcUaPassword }
+            },
+            3 => new Dictionary<string, object>
+            {
+                { "IpAddress", IpAddress },
+                { "Rack", 0 },
+                { "Slot", 0 }
             },
             _ => new Dictionary<string, object>()
         };
@@ -293,6 +305,7 @@ public partial class MainViewModel : ObservableObject
         _serialPort.Dispose();
         _modbusDriver.Dispose();
         _opcUaDriver.Dispose();
+        _s7Driver.Dispose();
         _logger?.Dispose();
     }
 

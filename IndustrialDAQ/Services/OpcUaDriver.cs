@@ -28,6 +28,7 @@ public class OpcUaDriver : IDeviceDriver
     /// <summary>
     /// 连接到 OPC UA 服务器
     /// parameters 需包含: "EndpointUrl" (string)
+    /// parameters 可选:   "Username" (string), "Password" (string) —— 提供则走用户名密码认证，否则匿名
     /// </summary>
     public async Task<bool> ConnectAsync(Dictionary<string, object> parameters)
     {
@@ -65,6 +66,13 @@ public class OpcUaDriver : IDeviceDriver
             var endpointConfig = EndpointConfiguration.Create(_appConfig);
             var configuredEndpoint = new ConfiguredEndpoint(null, endpointDesc, endpointConfig);
 
+            // 从参数读取凭证，提供则用用户名密码认证，否则匿名
+            var username = parameters.TryGetValue("Username", out var u) ? u.ToString() ?? "" : "";
+            var password = parameters.TryGetValue("Password", out var p) ? p.ToString() ?? "" : "";
+            var identity = !string.IsNullOrEmpty(username)
+                ? new UserIdentity(username, password)
+                : new UserIdentity();
+
             _session = await Session.Create(
                 configuration: _appConfig,
                 endpoint: configuredEndpoint,
@@ -72,7 +80,7 @@ public class OpcUaDriver : IDeviceDriver
                 checkDomain: false,
                 sessionName: "ModbusDAQ-Session",
                 sessionTimeout: 60000U,
-                identity: new UserIdentity(), // 匿名
+                identity: identity,
                 preferredLocales: null);
 
             _simulationMode = false;

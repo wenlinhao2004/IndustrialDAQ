@@ -17,6 +17,10 @@ public class SettingsService
     public int SelectedMode { get; set; } // 0=TCP, 1=RTU, 2=OPC UA
     public int LogIntervalMs { get; set; } = 1000;
     public string OpcUaEndpointUrl { get; set; } = "opc.tcp://localhost:4840";
+    public string OpcUaUsername { get; set; } = "";
+    public string OpcUaPassword { get; set; } = "";
+    public string AdminUsername { get; set; } = "admin";
+    public string AdminPassword { get; set; } = "admin";
 
     public static SettingsService Load()
     {
