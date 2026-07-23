@@ -1,7 +1,7 @@
-using System.IO;
+﻿using System.IO;
 using System.Text.Json;
 
-namespace ModbusDAQ.Models;
+namespace IndustrialDAQ.Models;
 
 /// <summary>
 /// 点位配置加载器 —— 从 JSON 文件翻译为 TagConfig 实例列表

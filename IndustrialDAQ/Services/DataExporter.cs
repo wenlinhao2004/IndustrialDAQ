@@ -1,7 +1,7 @@
-using System.IO;
+﻿using System.IO;
 using System.Text;
 
-namespace ModbusDAQ.Services;
+namespace IndustrialDAQ.Services;
 
 /// <summary>
 /// 数据导出服务 —— 将历史数据导出为 CSV 文件

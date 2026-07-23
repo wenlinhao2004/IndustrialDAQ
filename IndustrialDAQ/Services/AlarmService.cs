@@ -1,6 +1,6 @@
-using ModbusDAQ.Models;
+﻿using IndustrialDAQ.Models;
 
-namespace ModbusDAQ.Services;
+namespace IndustrialDAQ.Services;
 
 /// <summary>
 /// 报警服务 —— 检测数值越限并记录报警

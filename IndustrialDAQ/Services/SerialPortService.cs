@@ -1,7 +1,7 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.IO.Ports;
 
-namespace ModbusDAQ.Services;
+namespace IndustrialDAQ.Services;
 
 /// <summary>
 /// 串口通信服务 —— RS232 / RS485 原始数据收发

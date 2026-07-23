@@ -1,7 +1,7 @@
-using System.Windows;
-using ModbusDAQ.Services;
+﻿using System.Windows;
+using IndustrialDAQ.Services;
 
-namespace ModbusDAQ;
+namespace IndustrialDAQ;
 
 public partial class LoginWindow : Window
 {

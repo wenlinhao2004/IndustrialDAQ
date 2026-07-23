@@ -1,7 +1,7 @@
-using System.IO.Ports;
+﻿using System.IO.Ports;
 using Modbus.IO;
 
-namespace ModbusDAQ.Services;
+namespace IndustrialDAQ.Services;
 
 /// <summary>
 /// 串口适配器 —— 将 System.IO.Ports.SerialPort 包装为 NModbus 的 IStreamResource

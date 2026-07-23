@@ -1,7 +1,7 @@
-using System.IO;
+﻿using System.IO;
 using System.Text.Json;
 
-namespace ModbusDAQ.Services;
+namespace IndustrialDAQ.Services;
 
 /// <summary>
 /// 配置持久化服务 —— 保存/加载用户设置到 JSON 文件

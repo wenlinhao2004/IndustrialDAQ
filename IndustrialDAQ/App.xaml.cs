@@ -1,9 +1,9 @@
 ﻿using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
-using ModbusDAQ.Services;
-using ModbusDAQ.ViewModels;
+using IndustrialDAQ.Services;
+using IndustrialDAQ.ViewModels;
 
-namespace ModbusDAQ;
+namespace IndustrialDAQ;
 
 public partial class App : Application
 {

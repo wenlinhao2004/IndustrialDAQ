@@ -1,8 +1,8 @@
-using ModbusDAQ.Models;
+﻿using IndustrialDAQ.Models;
 using Opc.Ua;
 using Opc.Ua.Client;
 
-namespace ModbusDAQ.Services;
+namespace IndustrialDAQ.Services;
 
 /// <summary>
 /// OPC UA 设备驱动 —— 基于 OPC Foundation .NET Standard SDK
@@ -40,9 +40,9 @@ public class OpcUaDriver : IDeviceDriver
             // 构建客户端配置 (Demo 模式: 自动接受所有证书)
             _appConfig = new ApplicationConfiguration
             {
-                ApplicationName = "ModbusDAQ",
+                ApplicationName = "IndustrialDAQ",
                 ApplicationType = ApplicationType.Client,
-                ApplicationUri = $"urn:ModbusDAQ:{Environment.MachineName}",
+                ApplicationUri = $"urn:IndustrialDAQ:{Environment.MachineName}",
                 SecurityConfiguration = new SecurityConfiguration
                 {
                     ApplicationCertificate = new CertificateIdentifier(),
@@ -78,7 +78,7 @@ public class OpcUaDriver : IDeviceDriver
                 endpoint: configuredEndpoint,
                 updateBeforeConnect: false,
                 checkDomain: false,
-                sessionName: "ModbusDAQ-Session",
+                sessionName: "IndustrialDAQ-Session",
                 sessionTimeout: 60000U,
                 identity: identity,
                 preferredLocales: null);

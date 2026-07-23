@@ -1,9 +1,9 @@
-using System.IO.Ports;
+﻿using System.IO.Ports;
 using System.Net.Sockets;
 using Modbus.Device;
-using ModbusDAQ.Models;
+using IndustrialDAQ.Models;
 
-namespace ModbusDAQ.Services;
+namespace IndustrialDAQ.Services;
 
 /// <summary>
 /// Modbus 通信服务 —— 同时支持 Modbus TCP 和 Modbus RTU (串口)

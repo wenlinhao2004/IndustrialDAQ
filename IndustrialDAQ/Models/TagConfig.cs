@@ -1,4 +1,4 @@
-namespace ModbusDAQ.Models;
+﻿namespace IndustrialDAQ.Models;
 
 /// <summary>
 /// 数据点位配置 —— 同时支持 Modbus 寄存器、OPC UA 节点 和 S7 DB 块

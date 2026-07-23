@@ -1,8 +1,8 @@
-using System.Windows;
+﻿using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
-using ModbusDAQ.ViewModels;
+using IndustrialDAQ.ViewModels;
 
-namespace ModbusDAQ;
+namespace IndustrialDAQ;
 
 public partial class MainWindow : Window
 {

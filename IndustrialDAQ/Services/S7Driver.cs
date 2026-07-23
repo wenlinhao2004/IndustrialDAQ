@@ -1,7 +1,7 @@
-using ModbusDAQ.Models;
+﻿using IndustrialDAQ.Models;
 using S7.Net;
 
-namespace ModbusDAQ.Services;
+namespace IndustrialDAQ.Services;
 
 /// <summary>
 /// Siemens S7 协议驱动 —— 基于 S7NetPlus

@@ -1,7 +1,7 @@
-using System.IO;
+﻿using System.IO;
 using Microsoft.Data.Sqlite;
 
-namespace ModbusDAQ.Services;
+namespace IndustrialDAQ.Services;
 
 /// <summary>
 /// 数据记录服务 —— SQLite 数据库读写

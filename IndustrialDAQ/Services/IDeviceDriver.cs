@@ -1,6 +1,6 @@
-using ModbusDAQ.Models;
+﻿using IndustrialDAQ.Models;
 
-namespace ModbusDAQ.Services;
+namespace IndustrialDAQ.Services;
 
 /// <summary>
 /// 设备驱动抽象 —— 统一 Modbus TCP/RTU 和 OPC UA 的读取接口

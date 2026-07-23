@@ -1,15 +1,15 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.IO.Ports;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using ModbusDAQ.Models;
-using ModbusDAQ.Services;
+using IndustrialDAQ.Models;
+using IndustrialDAQ.Services;
 using OxyPlot;
 using OxyPlot.Axes;
 using OxyPlot.Series;
 
-namespace ModbusDAQ.ViewModels;
+namespace IndustrialDAQ.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
