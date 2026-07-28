@@ -80,6 +80,31 @@
                     <Run Text="管道: "/>
                     <Run Text="{Binding PipelineStatus}" Foreground="#007ACC"/>
                 </TextBlock>
+
+                <!-- 写入控制 -->
+                <Border Width="2" Background="#CCC" Margin="16,2,8,2"/>
+                <TextBlock Text="写入:" VerticalAlignment="Center" FontSize="13" Margin="0,0,4,0"/>
+                <ComboBox ItemsSource="{Binding WritableTags}"
+                          SelectedItem="{Binding SelectedWriteTag}"
+                          DisplayMemberPath="Name"
+                          Width="100" Height="26" VerticalAlignment="Center"
+                          Margin="0,0,6,0" FontSize="12"/>
+                <TextBox Text="{Binding WriteValueText}" Width="60" VerticalAlignment="Center"
+                         Margin="0,0,4,0" FontSize="13" Padding="4"/>
+                <TextBlock VerticalAlignment="Center" FontSize="11" Foreground="Gray"
+                           Margin="0,0,6,0">
+                    <Run Text="{Binding SelectedWriteTag.Unit, FallbackValue=''}"/>
+                </TextBlock>
+                <Button Content="写入" Command="{Binding WriteTagCommand}"
+                        Width="50" Height="26" FontSize="12"
+                        Background="#E67E22" Foreground="White" BorderThickness="0"
+                        Cursor="Hand" Margin="0,0,6,0">
+                    <Button.Resources>
+                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="3"/></Style>
+                    </Button.Resources>
+                </Button>
+                <TextBlock Text="{Binding WriteStatus}" VerticalAlignment="Center"
+                           FontSize="12" Foreground="#E67E22"/>
             </WrapPanel>
         </Border>
 
@@ -178,7 +203,7 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="点位:" VerticalAlignment="Center" FontSize="13"
                                                Margin="0,0,6,0"/>
-                                    <ComboBox SelectedItem="{Binding SelectedHistoryTag}"
+                                    <ComboBox SelectedValuePath="Content" SelectedValue="{Binding SelectedHistoryTag}"
                                               Width="110" Height="26" FontSize="12">
                                         <ComboBoxItem Content="全部"/>
                                         <ComboBoxItem Content="主电机温度"/>

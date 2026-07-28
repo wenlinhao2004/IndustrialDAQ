@@ -16,6 +16,7 @@ namespace IndustrialDAQ.Services;
 public class S7Driver : IDeviceDriver
 {
     private Plc? _plc;
+    private Dictionary<string, object> _lastParams = new();
 
     public bool IsConnected { get; private set; }
     public string ConnectionType { get; private set; } = "无";
@@ -32,6 +33,7 @@ public class S7Driver : IDeviceDriver
     /// </summary>
     public async Task<bool> ConnectAsync(Dictionary<string, object> parameters)
     {
+        _lastParams = new Dictionary<string, object>(parameters);
         if (!parameters.TryGetValue("IpAddress", out var ipObj) || ipObj is not string ip)
             return false;
 
@@ -84,6 +86,15 @@ public class S7Driver : IDeviceDriver
         ConnectionType = "无";
     }
 
+    /// <summary>断线重连，使用上次连接参数</summary>
+    public async Task<bool> ReconnectAsync()
+    {
+        Disconnect();
+        if (_lastParams.Count == 0) return false;
+
+        return await ConnectAsync(_lastParams);
+    }
+
     // ==================== 数据读取 ====================
 
     /// <summary>批量读取 S7 DB 块中的点位</summary>
@@ -119,6 +130,40 @@ public class S7Driver : IDeviceDriver
         });
     }
 
+    // ==================== 数据写入 ====================
+
+    /// <summary>
+    /// 写入单个 S7 DB 块点位
+    /// 工程值 → 原始值 → 大端序字节 → 写入 DB
+    /// </summary>
+    public async Task<bool> WriteTagAsync(TagConfig tag, double value)
+    {
+        if (_plc == null || !_plc.IsConnected)
+            throw new InvalidOperationException("S7 PLC 未连接");
+
+        try
+        {
+            var rawValue = (value - tag.Offset) / tag.Scale;
+            var bytes = ConvertToBytes(rawValue, tag.S7DataType, tag.BitOffset);
+            var byteCount = GetByteCount(tag.S7DataType);
+
+            await Task.Run(() =>
+                _plc.WriteBytes(
+                    S7.Net.DataType.DataBlock,
+                    tag.DbNumber,
+                    tag.ByteOffset,
+                    bytes.Take(byteCount).ToArray()));
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[S7] 写入失败 '{tag.Name}' (DB{tag.DbNumber}.{tag.S7DataType}{tag.ByteOffset}): {ex.Message}");
+            return false;
+        }
+    }
+
     // ==================== 字节操作 ====================
 
     /// <summary>根据 S7 数据类型返回所需字节数</summary>
@@ -131,6 +176,27 @@ public class S7Driver : IDeviceDriver
         "REAL" => 4,
         _ => 4
     };
+
+    /// <summary>
+    /// PC (小端序 double) → S7 (大端序字节)
+    /// 写数据时的逆转换: 先转小端字节 → 翻转 → 写入 PLC
+    /// </summary>
+    private static byte[] ConvertToBytes(double value, string dataType, int bitOffset)
+    {
+        byte[] bytes = dataType switch
+        {
+            "BOOL" => new[] { (byte)(value != 0 ? (1 << bitOffset) : 0) },
+            "BYTE" => new[] { (byte)value },
+            "INT"  => BitConverter.GetBytes((short)value),
+            "DINT" => BitConverter.GetBytes((int)value),
+            "REAL" => BitConverter.GetBytes((float)value),
+            _      => BitConverter.GetBytes((float)value)
+        };
+        // 翻转为大端序
+        if (BitConverter.IsLittleEndian && bytes.Length > 1)
+            Array.Reverse(bytes);
+        return bytes;
+    }
 
     /// <summary>
     /// 将 S7 大端序字节转换为 double 值

@@ -17,6 +17,12 @@ public interface IDeviceDriver : IDisposable
     /// <summary>断开连接</summary>
     void Disconnect();
 
+    /// <summary>断线重连，使用上次连接参数</summary>
+    Task<bool> ReconnectAsync();
+
     /// <summary>批量读取所有配置点位</summary>
     Task<Dictionary<string, double>> ReadAllTagsAsync(List<TagConfig> tags);
+
+    /// <summary>写入单个点位，value 为工程值（驱动内部自动按 Scale/Offset 反算）</summary>
+    Task<bool> WriteTagAsync(TagConfig tag, double value);
 }

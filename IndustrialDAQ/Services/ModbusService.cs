@@ -14,6 +14,7 @@ public class ModbusService : IDeviceDriver
     private object? _transport;              // TcpClient 或 SerialPort
     private IModbusMaster? _master;
     private byte _slaveId = 1;               // RTU 从站地址
+    private Dictionary<string, object> _lastParams = new();
 
     public bool IsConnected { get; private set; }
     public string ConnectionType { get; private set; } = "无"; // "TCP" / "RTU"
@@ -27,6 +28,7 @@ public class ModbusService : IDeviceDriver
     /// </summary>
     public async Task<bool> ConnectAsync(Dictionary<string, object> parameters)
     {
+        _lastParams = new Dictionary<string, object>(parameters);
         var mode = parameters.TryGetValue("Mode", out var m) ? m.ToString() : "TCP";
 
         return mode switch
@@ -116,6 +118,15 @@ public class ModbusService : IDeviceDriver
         ConnectionType = "无";
     }
 
+    /// <summary>断线重连，使用上次连接参数</summary>
+    public async Task<bool> ReconnectAsync()
+    {
+        Disconnect();
+        if (_lastParams.Count == 0) return false;
+
+        return await ConnectAsync(_lastParams);
+    }
+
     // ==================== 数据读取 ====================
 
     /// <summary>读取保持寄存器</summary>
@@ -147,6 +158,30 @@ public class ModbusService : IDeviceDriver
         }
 
         return result;
+    }
+
+    // ==================== 数据写入 ====================
+
+    /// <summary>
+    /// 写入单个保持寄存器
+    /// 工程值 → 原始值: rawValue = (value - Offset) / Scale
+    /// </summary>
+    public async Task<bool> WriteTagAsync(TagConfig tag, double value)
+    {
+        if (_master == null)
+            throw new InvalidOperationException("未连接到设备");
+
+        try
+        {
+            var rawValue = (ushort)Math.Round((value - tag.Offset) / tag.Scale);
+            await _master.WriteSingleRegisterAsync(_slaveId, tag.Address, rawValue);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Modbus] 写入失败 '{tag.Name}': {ex.Message}");
+            return false;
+        }
     }
 
     public void Dispose() => Disconnect();

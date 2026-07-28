@@ -22,6 +22,9 @@ public partial class MainViewModel : ObservableObject
     private readonly SettingsService _settings;
     private DataLogger? _logger;
 
+    // 延迟初始化数据库（与连接解耦，断开后仍可查询）
+    private DataLogger Logger => _logger ??= new DataLogger("modbus_data.db");
+
     private DataPipeline<Dictionary<string, double>>? _pipeline;
     private CancellationTokenSource? _timerCts;
 
@@ -48,6 +51,12 @@ public partial class MainViewModel : ObservableObject
     // 连接模式: 0=TCP, 1=RTU, 2=OPC UA, 3=S7
     [ObservableProperty] private int _selectedMode;
 
+    // 写入控制
+    [ObservableProperty] private TagConfig? _selectedWriteTag;
+    [ObservableProperty] private string _writeValueText = "0";
+    [ObservableProperty] private string _writeStatus = "";
+    public List<TagConfig> WritableTags { get; }
+
     public ObservableCollection<TagViewModel> Tags { get; } = new();
     public ObservableCollection<AlarmRecord> Alarms { get; } = new();
     public ObservableCollection<string> Logs { get; } = new();
@@ -67,11 +76,18 @@ public partial class MainViewModel : ObservableObject
 
     private readonly List<TagConfig> _tagConfigs = TagConfigLoader.Load();
 
+    // 可写点位：电机转速、阀门开度
+    private readonly TagConfig[] _writableConfigs =
+        TagConfigLoader.Load().Where(t => t.Name is "电机转速" or "阀门开度").ToArray();
+
     public MainViewModel(ModbusService modbusDriver, OpcUaDriver opcUaDriver, S7Driver s7Driver)
     {
         _modbusDriver = modbusDriver;
         _opcUaDriver = opcUaDriver;
         _s7Driver = s7Driver;
+
+        WritableTags = new List<TagConfig>(_writableConfigs);
+        SelectedWriteTag = WritableTags.FirstOrDefault();
 
         // 加载用户配置
         _settings = SettingsService.Load();
@@ -224,11 +240,38 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task WriteTag()
+    {
+        if (_currentDriver == null || !_currentDriver.IsConnected)
+        {
+            WriteStatus = "未连接设备，无法写入";
+            return;
+        }
+
+        if (SelectedWriteTag == null)
+        {
+            WriteStatus = "请选择要写入的点位";
+            return;
+        }
+
+        if (!double.TryParse(WriteValueText, out var value))
+        {
+            WriteStatus = "请输入有效的数值";
+            return;
+        }
+
+        bool ok = await _currentDriver.WriteTagAsync(SelectedWriteTag, value);
+        if (ok)
+            WriteStatus = $"✓ 已写入 {SelectedWriteTag.Name} = {value} {SelectedWriteTag.Unit}";
+        else
+            WriteStatus = $"✗ 写入失败";
+    }
+
+    [RelayCommand]
     private void QueryHistory()
     {
-        if (_logger == null) return;
         var tag = SelectedHistoryTag == "全部" ? null : SelectedHistoryTag;
-        var records = _logger.QueryHistory(tag, limit: 500);
+        var records = Logger.QueryHistory(tag, limit: 500);
         HistoryRecords.Clear();
         foreach (var r in records) HistoryRecords.Add(r);
         HistoryRecordCount = HistoryRecords.Count;
@@ -239,7 +282,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ExportCsv()
     {
-        if (_logger == null || HistoryRecords.Count == 0)
+        if (HistoryRecords.Count == 0)
         {
             MessageBox.Show("请先查询历史数据再导出。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
@@ -249,9 +292,8 @@ public partial class MainViewModel : ObservableObject
 
     private void RefreshDbStatus()
     {
-        if (_logger == null) return;
-        DbRecordCount = _logger.GetRecordCount();
-        DbFileSizeKb = _logger.GetFileSizeKb();
+        DbRecordCount = Logger.GetRecordCount();
+        DbFileSizeKb = Logger.GetFileSizeKb();
         DbStatus = $"SQLite | {DbRecordCount:N0} 条 | {DbFileSizeKb:N0} KB";
     }
 
@@ -281,7 +323,6 @@ public partial class MainViewModel : ObservableObject
         IsConnected = true;
         StatusText = $"已连接 ({_currentDriver!.ConnectionType})";
         ConnectBtnText = "断开";
-        _logger = new DataLogger("modbus_data.db");
         RefreshDbStatus();
         StartPipeline();
     }
@@ -312,8 +353,6 @@ public partial class MainViewModel : ObservableObject
 
         _currentDriver?.Disconnect();
         _currentDriver = null;
-        _logger?.Dispose();
-        _logger = null;
 
         IsConnected = false;
         StatusText = "未连接";
@@ -342,11 +381,58 @@ public partial class MainViewModel : ObservableObject
         int interval = int.TryParse(LogIntervalText, out var v) ? Math.Max(v, 200) : 1000;
 
         _pipeline.Start(
-            producerFunc: async (ct) => await driver.ReadAllTagsAsync(_tagConfigs),
+            producerFunc: async (ct) =>
+            {
+                try
+                {
+                    return await driver.ReadAllTagsAsync(_tagConfigs);
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    // 连接断开，触发重连
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        Logs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] 连接断开: {ex.Message}");
+                        StatusText = "重连中...";
+                        IsConnected = false;
+                    });
+
+                    // 最多重试 5 次，间隔递增
+                    for (int attempt = 1; attempt <= 5; attempt++)
+                    {
+                        if (ct.IsCancellationRequested) break;
+
+                        Application.Current.Dispatcher.Invoke(() =>
+                            StatusText = $"重连中... (第 {attempt} 次)");
+
+                        await Task.Delay(attempt * 2000, ct); // 2s, 4s, 6s, 8s, 10s
+
+                        bool ok = await driver.ReconnectAsync();
+                        if (ok)
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                IsConnected = true;
+                                StatusText = $"已连接 ({driver.ConnectionType})";
+                                Logs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] 重连成功 (第 {attempt} 次)");
+                            });
+                            return new Dictionary<string, double>(); // 返回空数据，下轮正常读
+                        }
+                    }
+
+                    // 5 次都失败
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        StatusText = "重连失败，请手动连接";
+                        Logs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] 重连失败，已放弃");
+                    });
+                    throw; // 抛出异常，让管道停止
+                }
+            },
             consumerAction: (values) =>
             {
                 _alarm.CheckLimits(_tagConfigs, values);
-                _logger?.InsertBatch(values);
+                Logger.InsertBatch(values);
             },
             produceIntervalMs: interval,
             boundedCapacity: 100
@@ -392,11 +478,8 @@ public partial class MainViewModel : ObservableObject
                         PlotModel.InvalidatePlot(true);
                     });
 
-                    if (_logger != null)
-                    {
-                        LogCount = (int.TryParse(LogCount, out var c) ? c : 0) + 1 + "";
-                        RefreshDbStatus();
-                    }
+                    LogCount = (int.TryParse(LogCount, out var c) ? c : 0) + 1 + "";
+                    RefreshDbStatus();
                 }
             }
             catch (OperationCanceledException) { break; }

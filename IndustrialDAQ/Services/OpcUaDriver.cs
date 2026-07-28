@@ -18,6 +18,7 @@ public class OpcUaDriver : IDeviceDriver
 {
     private Session? _session;
     private ApplicationConfiguration? _appConfig;
+    private Dictionary<string, object> _lastParams = new();
 
     public bool IsConnected { get; private set; }
     public string ConnectionType { get; private set; } = "无";
@@ -29,6 +30,7 @@ public class OpcUaDriver : IDeviceDriver
     /// </summary>
     public async Task<bool> ConnectAsync(Dictionary<string, object> parameters)
     {
+        _lastParams = new Dictionary<string, object>(parameters);
         if (!parameters.TryGetValue("EndpointUrl", out var urlObj) || urlObj is not string endpointUrl)
             return false;
 
@@ -144,6 +146,45 @@ public class OpcUaDriver : IDeviceDriver
         return result;
     }
 
+    // ==================== 数据写入 ====================
+
+    /// <summary>
+    /// 写入单个 OPC UA 节点
+    /// 工程值 → 原始值: rawValue = (value - Offset) / Scale
+    /// </summary>
+    public async Task<bool> WriteTagAsync(TagConfig tag, double value)
+    {
+        if (_session == null || !_session.Connected)
+            throw new InvalidOperationException("OPC UA 会话未连接");
+
+        if (string.IsNullOrEmpty(tag.NodeId)) return false;
+
+        try
+        {
+            var rawValue = (value - tag.Offset) / tag.Scale;
+            var nodeId = NodeId.Parse(tag.NodeId);
+
+            var writeValue = new WriteValue
+            {
+                NodeId = nodeId,
+                AttributeId = Attributes.Value,
+                Value = new DataValue(new Variant(Convert.ToDouble(rawValue)))
+            };
+
+            var response = await _session.WriteAsync(
+                requestHeader: null,
+                nodesToWrite: new WriteValueCollection { writeValue },
+                ct: CancellationToken.None);
+
+            return StatusCode.IsGood(response.Results[0]);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[OPC UA] 写入失败 '{tag.Name}': {ex.Message}");
+            return false;
+        }
+    }
+
     public void Disconnect()
     {
         _session?.Close();
@@ -151,6 +192,15 @@ public class OpcUaDriver : IDeviceDriver
         _session = null;
         IsConnected = false;
         ConnectionType = "无";
+    }
+
+    /// <summary>断线重连，使用上次连接参数</summary>
+    public async Task<bool> ReconnectAsync()
+    {
+        Disconnect();
+        if (_lastParams.Count == 0) return false;
+
+        return await ConnectAsync(_lastParams);
     }
 
     public void Dispose() => Disconnect();
