@@ -81,7 +81,7 @@ public class DataPipeline<T> : IDisposable
                 // GetConsumingEnumerable 会阻塞等待，直到 CompleteAdding 被调用
                 foreach (var item in _workQueue.GetConsumingEnumerable(token))
                 {
-                    consumerAction(item);
+                    consumerAction(item); // 触发事件数据处理
                     ResultQueue.Enqueue(item);
                 }
             }

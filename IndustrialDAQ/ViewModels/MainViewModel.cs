@@ -1,7 +1,5 @@
 using System.Collections.ObjectModel;
-using System.IO;
 using System.IO.Ports;
-using System.Text.Json;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -369,52 +367,5 @@ public partial class MainViewModel : ObservableObject
         foreach (var dev in Devices)
             dev.Dispose();
         _logger?.Dispose();
-    }
-}
-
-// ==================== DeviceConfig 加载器 ====================
-
-public static class DeviceConfigLoader
-{
-    private const string DefaultPath = "devices.json";
-
-    public static List<DeviceConfig> Load(string? path = null)
-    {
-        path ??= DefaultPath;
-        if (!File.Exists(path))
-            return new List<DeviceConfig>();
-
-        var json = File.ReadAllText(path);
-        return JsonSerializer.Deserialize<List<DeviceConfig>>(json) ?? new();
-    }
-}
-
-// ==================== TagViewModel ====================
-
-public partial class TagViewModel : ObservableObject
-{
-    private readonly TagConfig _config;
-    public string TagName { get; set; }
-    public string Unit { get; set; }
-    public string DisplayName { get; set; } = "";  // UI 显示用（含设备名前缀）
-
-    [ObservableProperty] private double _value;
-    [ObservableProperty] private string _displayValue = "--";
-    [ObservableProperty] private bool _isAlarm;
-    [ObservableProperty] private string _alarmType = "";
-
-    public TagViewModel(TagConfig config)
-    {
-        _config = config;
-        TagName = config.Name;
-        Unit = config.Unit;
-    }
-
-    public void UpdateValue(double val)
-    {
-        Value = val;
-        DisplayValue = $"{val:F2} {_config.Unit}";
-        IsAlarm = val > _config.HighLimit || val < _config.LowLimit;
-        AlarmType = val > _config.HighLimit ? "▲ 高" : val < _config.LowLimit ? "▼ 低" : "";
     }
 }
