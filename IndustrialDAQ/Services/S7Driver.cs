@@ -67,8 +67,9 @@ public class S7Driver : IDeviceDriver
             ConnectionType = $"S7 ({ip}, Rack={rack}, Slot={slot})";
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[S7] 连接失败 ({ip}, Rack={rack}, Slot={slot}): {ex.Message}");
             _plc?.Close();
             _plc = null;
             IsConnected = false;

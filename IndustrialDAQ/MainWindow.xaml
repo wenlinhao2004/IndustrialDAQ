@@ -20,21 +20,31 @@
         <Border Grid.Row="0" Padding="10" Margin="0,0,0,6"
                 Background="#F0F0F0" CornerRadius="6">
             <WrapPanel VerticalAlignment="Center">
-                <TextBlock Text="模式:" VerticalAlignment="Center" FontSize="13" Margin="0,0,6,0"/>
-                <ComboBox SelectedIndex="{Binding SelectedMode}" Width="80" Height="26"
-                          VerticalAlignment="Center" Margin="0,0,12,0" FontSize="13">
-                    <ComboBoxItem Content="TCP"/>
-                    <ComboBoxItem Content="RTU"/>
-                    <ComboBoxItem Content="OPC UA"/>
+                <!-- 设备选择 -->
+                <TextBlock Text="设备:" VerticalAlignment="Center" FontSize="13" Margin="0,0,6,0"/>
+                <ComboBox ItemsSource="{Binding Devices}"
+                          SelectedItem="{Binding SelectedDevice}"
+                          DisplayMemberPath="DeviceName"
+                          Width="110" Height="26" VerticalAlignment="Center"
+                          Margin="0,0,8,0" FontSize="13"/>
+
+                <!-- 协议选择 -->
+                <TextBlock Text="协议:" VerticalAlignment="Center" FontSize="13" Margin="0,0,4,0"/>
+                <ComboBox SelectedValuePath="Content" SelectedValue="{Binding SelectedProtocol}"
+                          Width="90" Height="26" VerticalAlignment="Center"
+                          Margin="0,0,10,0" FontSize="13">
+                    <ComboBoxItem Content="ModbusTCP"/>
+                    <ComboBoxItem Content="ModbusRTU"/>
+                    <ComboBoxItem Content="OpcUa"/>
                     <ComboBoxItem Content="S7"/>
                 </ComboBox>
 
-                <!-- TCP 配置 -->
+                <!-- TCP / S7 通用 -->
                 <TextBlock Text="IP:" VerticalAlignment="Center" FontSize="13" Margin="0,0,6,0"/>
                 <TextBox Text="{Binding IpAddress}" Width="110" VerticalAlignment="Center"
                          Margin="0,0,12,0" FontSize="13" Padding="4"/>
 
-                <!-- RTU 串口配置 -->
+                <!-- RTU 串口 -->
                 <TextBlock Text="串口:" VerticalAlignment="Center" FontSize="13" Margin="0,0,6,0"/>
                 <TextBox Text="{Binding ComPort}" Width="70" VerticalAlignment="Center"
                          Margin="0,0,6,0" FontSize="13" Padding="4"/>
@@ -47,38 +57,47 @@
                     <sys:Int32>115200</sys:Int32>
                 </ComboBox>
 
-                <!-- OPC UA 配置 -->
+                <!-- OPC UA -->
                 <TextBlock Text="端点:" VerticalAlignment="Center" FontSize="13" Margin="0,0,6,0"/>
                 <TextBox Text="{Binding OpcUaEndpointUrl}" Width="200" VerticalAlignment="Center"
                          Margin="0,0,12,0" FontSize="13" Padding="4"/>
 
-
-                <TextBlock Text="间隔(ms):" VerticalAlignment="Center" FontSize="13" Margin="0,0,4,0"/>
-                <TextBox Text="{Binding LogIntervalText}" Width="60" VerticalAlignment="Center"
-                         Margin="0,0,12,0" FontSize="13" Padding="4"/>
-
-                <Button Content="{Binding ConnectBtnText}" Command="{Binding ConnectCommand}"
-                        Width="90" Height="30" Margin="0,0,6,0"
-                        FontSize="13" Background="#007ACC" Foreground="White" BorderThickness="0"
+                <!-- 连接 / 断开按钮 -->
+                <Button Command="{Binding ConnectCommand}"
+                        Width="70" Height="30" Margin="0,0,10,0"
+                        FontSize="13" Foreground="White" BorderThickness="0"
                         Cursor="Hand">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="#007ACC"/>
+                            <Setter Property="Content" Value="连接"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedDevice.IsConnected}" Value="True">
+                                    <Setter Property="Background" Value="#CC3333"/>
+                                    <Setter Property="Content" Value="断开"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
                     <Button.Resources>
                         <Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style>
                     </Button.Resources>
                 </Button>
 
-                <Border Width="2" Background="#CCC" Margin="4,2,16,2"/>
-
+                <!-- 所选设备状态 -->
                 <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="Bold">
-                    <Run Text="状态: "/>
-                    <Run Text="{Binding StatusText}" Foreground="{Binding IsConnected,
-                         Converter={StaticResource BoolToColorConverter}}"/>
+                    <Run Text="{Binding SelectedDevice.DeviceName, FallbackValue=''}"/>
+                    <Run Text=" "/>
+                    <Run Text="{Binding SelectedDevice.StatusText, FallbackValue='未选择设备'}"
+                         Foreground="{Binding SelectedDevice.IsConnected,
+                             Converter={StaticResource BoolToColorConverter}}"/>
                 </TextBlock>
 
                 <Border Width="2" Background="#CCC" Margin="16,2,16,2"/>
 
                 <TextBlock VerticalAlignment="Center" FontSize="13">
-                    <Run Text="管道: "/>
-                    <Run Text="{Binding PipelineStatus}" Foreground="#007ACC"/>
+                    <Run Text="{Binding SelectedDevice.PipelineStatus, FallbackValue='管道未启动'}"
+                         Foreground="#007ACC"/>
                 </TextBlock>
 
                 <!-- 写入控制 -->
@@ -133,7 +152,7 @@
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
-                                            <TextBlock Text="{Binding Name}" FontSize="13"/>
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="13"/>
                                             <TextBlock FontSize="12" Foreground="Gray">
                                                 <Run Text="{Binding Value, StringFormat={}{0:F2}}"/>
                                                 <Run Text=" "/>

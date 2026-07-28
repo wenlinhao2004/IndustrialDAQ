@@ -32,7 +32,10 @@ public class SettingsService
                 return JsonSerializer.Deserialize<SettingsService>(json) ?? new();
             }
         }
-        catch { /* 文件损坏则使用默认 */ }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Settings] 加载配置文件失败: {ex.Message}");
+        }
         return new SettingsService();
     }
 

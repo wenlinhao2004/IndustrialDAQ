@@ -1,0 +1,58 @@
+[
+  {
+    "DeviceId": "dev_a",
+    "DeviceName": "设备 A",
+    "Protocol": "ModbusTCP",
+    "ConnectionParams": {
+      "Mode": "TCP",
+      "IpAddress": "127.0.0.1"
+    },
+    "Tags": [
+      {
+        "Name": "主电机温度", "Address": 0, "NodeId": "ns=2;s=Temperature1",
+        "DbNumber": 1, "ByteOffset": 0, "S7DataType": "REAL", "BitOffset": 0,
+        "Unit": "℃", "HighLimit": 80.0, "LowLimit": 0.0, "Scale": 0.1, "Offset": 0.0
+      },
+      {
+        "Name": "冷却水温度", "Address": 1, "NodeId": "ns=2;s=Temperature2",
+        "DbNumber": 1, "ByteOffset": 4, "S7DataType": "REAL", "BitOffset": 0,
+        "Unit": "℃", "HighLimit": 35.0, "LowLimit": 5.0, "Scale": 0.1, "Offset": 0.0
+      },
+      {
+        "Name": "管道压力", "Address": 2, "NodeId": "ns=2;s=Pressure1",
+        "DbNumber": 1, "ByteOffset": 8, "S7DataType": "REAL", "BitOffset": 0,
+        "Unit": "MPa", "HighLimit": 1.6, "LowLimit": 0.1, "Scale": 0.001, "Offset": 0.0
+      },
+      {
+        "Name": "电机转速", "Address": 3, "NodeId": "ns=2;s=Speed1",
+        "DbNumber": 1, "ByteOffset": 12, "S7DataType": "INT", "BitOffset": 0,
+        "Unit": "rpm", "HighLimit": 1500, "LowLimit": 10, "Scale": 1.0, "Offset": 0.0
+      }
+    ]
+  },
+  {
+    "DeviceId": "dev_b",
+    "DeviceName": "设备 B",
+    "Protocol": "OpcUa",
+    "ConnectionParams": {
+      "EndpointUrl": "opc.tcp://127.0.0.1:4840"
+    },
+    "Tags": [
+      {
+        "Name": "流量", "Address": 4, "NodeId": "ns=2;s=Flow1",
+        "DbNumber": 1, "ByteOffset": 14, "S7DataType": "REAL", "BitOffset": 0,
+        "Unit": "m³/h", "HighLimit": 50, "LowLimit": 2, "Scale": 0.01, "Offset": 0.0
+      },
+      {
+        "Name": "液位", "Address": 5, "NodeId": "ns=2;s=Level1",
+        "DbNumber": 1, "ByteOffset": 18, "S7DataType": "REAL", "BitOffset": 0,
+        "Unit": "m", "HighLimit": 4.5, "LowLimit": 0.5, "Scale": 0.001, "Offset": 0.0
+      },
+      {
+        "Name": "阀门开度", "Address": 6, "NodeId": "ns=2;s=Valve1",
+        "DbNumber": 1, "ByteOffset": 22, "S7DataType": "REAL", "BitOffset": 0,
+        "Unit": "%", "HighLimit": 100, "LowLimit": 0, "Scale": 0.1, "Offset": 0.0
+      }
+    ]
+  }
+]

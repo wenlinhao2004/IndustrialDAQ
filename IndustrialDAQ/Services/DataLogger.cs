@@ -65,7 +65,11 @@ public class DataLogger : IDisposable
     public long GetFileSizeKb()
     {
         try { return new FileInfo(_dbPath).Length / 1024; }
-        catch { return 0; }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DataLogger] 获取文件大小失败: {ex.Message}");
+            return 0;
+        }
     }
 
     /// <summary>历史数据查询</summary>

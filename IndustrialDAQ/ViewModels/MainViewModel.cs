@@ -1,5 +1,7 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
+using System.IO;
 using System.IO.Ports;
+using System.Text.Json;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,50 +15,40 @@ namespace IndustrialDAQ.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    private readonly ModbusService _modbusDriver;
-    private readonly OpcUaDriver _opcUaDriver;
-    private readonly S7Driver _s7Driver;
-    private IDeviceDriver? _currentDriver;
     private readonly AlarmService _alarm = new();
     private readonly SerialPortService _serialPort = new();
     private readonly SettingsService _settings;
     private DataLogger? _logger;
 
-    // 延迟初始化数据库（与连接解耦，断开后仍可查询）
     private DataLogger Logger => _logger ??= new DataLogger("modbus_data.db");
 
-    private DataPipeline<Dictionary<string, double>>? _pipeline;
-    private CancellationTokenSource? _timerCts;
+    // ==================== 设备管理 ====================
+
+    public ObservableCollection<DeviceViewModel> Devices { get; } = new();
+
+    [ObservableProperty] private DeviceViewModel? _selectedDevice;
+    [ObservableProperty] private string _selectedProtocol = "ModbusTCP";
 
     // ==================== UI 绑定属性 ====================
 
-    [ObservableProperty] private string _ipAddress;
-    [ObservableProperty] private string _opcUaEndpointUrl;
-    [ObservableProperty] private string _statusText = "未连接";
-    [ObservableProperty] private bool _isConnected;
-    [ObservableProperty] private string _connectBtnText = "TCP 连接";
-    [ObservableProperty] private string _logIntervalText;
+    [ObservableProperty] private string _ipAddress = "127.0.0.1";
+    [ObservableProperty] private string _opcUaEndpointUrl = "opc.tcp://127.0.0.1:4840";
+    [ObservableProperty] private string _logIntervalText = "1000";
     [ObservableProperty] private string _logCount = "0";
     [ObservableProperty] private string _alarmCount = "0";
 
-    // 串口配置
-    [ObservableProperty] private string _comPort;
+    // 串口
+    [ObservableProperty] private string _comPort = "COM1";
     [ObservableProperty] private int _baudRate = 9600;
     [ObservableProperty] private string _serialStatus = "串口未打开";
 
-    // 线程状态
-    [ObservableProperty] private string _pipelineStatus = "未启动";
-    [ObservableProperty] private int _queueSize;
-
-    // 连接模式: 0=TCP, 1=RTU, 2=OPC UA, 3=S7
-    [ObservableProperty] private int _selectedMode;
-
-    // 写入控制
+    // 写入
     [ObservableProperty] private TagConfig? _selectedWriteTag;
     [ObservableProperty] private string _writeValueText = "0";
     [ObservableProperty] private string _writeStatus = "";
-    public List<TagConfig> WritableTags { get; }
+    public List<TagConfig> WritableTags { get; } = new();
 
+    // 聚合
     public ObservableCollection<TagViewModel> Tags { get; } = new();
     public ObservableCollection<AlarmRecord> Alarms { get; } = new();
     public ObservableCollection<string> Logs { get; } = new();
@@ -70,36 +62,26 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _selectedHistoryTag = "全部";
     [ObservableProperty] private int _historyRecordCount;
 
-    // 图表
+    // 图表（动态管理）
     public PlotModel PlotModel { get; }
     private readonly Dictionary<string, LineSeries> _seriesMap = new();
+    private readonly OxyColor[] _colors = {
+        OxyColors.Red, OxyColors.Blue, OxyColors.Green,
+        OxyColors.Orange, OxyColors.Purple, OxyColors.Brown,
+        OxyColors.Teal, OxyColors.HotPink, OxyColors.Olive, OxyColors.Cyan
+    };
+    private int _colorIndex;
 
-    private readonly List<TagConfig> _tagConfigs = TagConfigLoader.Load();
-
-    // 可写点位：电机转速、阀门开度
-    private readonly TagConfig[] _writableConfigs =
-        TagConfigLoader.Load().Where(t => t.Name is "电机转速" or "阀门开度").ToArray();
-
-    public MainViewModel(ModbusService modbusDriver, OpcUaDriver opcUaDriver, S7Driver s7Driver)
+    public MainViewModel()
     {
-        _modbusDriver = modbusDriver;
-        _opcUaDriver = opcUaDriver;
-        _s7Driver = s7Driver;
-
-        WritableTags = new List<TagConfig>(_writableConfigs);
-        SelectedWriteTag = WritableTags.FirstOrDefault();
-
-        // 加载用户配置
+        // 加载设置
         _settings = SettingsService.Load();
         IpAddress = _settings.IpAddress;
         ComPort = _settings.ComPort;
         BaudRate = _settings.BaudRate;
-        SelectedMode = _settings.SelectedMode;
-        LogIntervalText = _settings.LogIntervalMs.ToString();
-        OpcUaEndpointUrl = _settings.OpcUaEndpointUrl;
 
-        // 保存配置（当属性变化时）
-        PropertyChanged += (_, _) => SaveSettings();
+        // 加载设备配置
+        LoadDevices();
 
         // 图表
         PlotModel = new PlotModel { Title = "实时数据趋势" };
@@ -114,20 +96,6 @@ public partial class MainViewModel : ObservableObject
             MajorGridlineStyle = LineStyle.Solid, MinorGridlineStyle = LineStyle.Dot
         });
 
-        var colors = new[] { OxyColors.Red, OxyColors.Blue, OxyColors.Green,
-                             OxyColors.Orange, OxyColors.Purple, OxyColors.Brown, OxyColors.Teal };
-        for (int i = 0; i < _tagConfigs.Count; i++)
-        {
-            Tags.Add(new TagViewModel(_tagConfigs[i]));
-            var series = new LineSeries
-            {
-                Title = _tagConfigs[i].Name, Color = colors[i % colors.Length],
-                StrokeThickness = 1.5, MarkerType = MarkerType.None
-            };
-            _seriesMap[_tagConfigs[i].Name] = series;
-            PlotModel.Series.Add(series);
-        }
-
         // 报警回调
         _alarm.OnAlarm += record => Application.Current.Dispatcher.Invoke(() =>
         {
@@ -139,7 +107,104 @@ public partial class MainViewModel : ObservableObject
         _serialPort.OnStatusChanged += msg =>
             Application.Current.Dispatcher.Invoke(() => SerialStatus = msg);
 
-        UpdateConnectBtnText();
+        PropertyChanged += (_, _) => SaveSettings();
+    }
+
+    partial void OnSelectedDeviceChanged(DeviceViewModel? value)
+    {
+        if (value != null)
+        {
+            SelectedProtocol = value.Protocol;
+            RefreshWritableTags();
+        }
+    }
+
+    // ==================== 设备加载 ====================
+
+    private void LoadDevices()
+    {
+        var configs = DeviceConfigLoader.Load();
+        foreach (var cfg in configs)
+        {
+            DeviceViewModel device;
+            try
+            {
+                device = new DeviceViewModel(cfg);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"加载设备 '{cfg.DeviceName}' 失败:\n{ex.Message}\n\n" +
+                    $"堆栈: {ex.StackTrace}",
+                    "设备加载错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                continue;
+            }
+
+            // 转发数据事件
+            device.OnDataReceived += values =>
+                Application.Current.Dispatcher.Invoke(() => OnDeviceData(device, values));
+
+            device.OnLog += msg =>
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    Logs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] {msg}");
+                    if (Logs.Count > 200) Logs.RemoveAt(Logs.Count - 1);
+                });
+
+            device.OnError += ex =>
+                Application.Current.Dispatcher.Invoke(() =>
+                    Logs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] 错误: {ex.Message}"));
+
+            Devices.Add(device);
+        }
+        SelectedDevice = Devices.FirstOrDefault();
+    }
+
+    private void OnDeviceData(DeviceViewModel device, Dictionary<string, double> values)
+    {
+        var now = DateTime.Now;
+
+        // 报警 + 入库
+        _alarm.CheckLimits(device.TagConfigs, values);
+        Logger.InsertBatch(values);
+
+        // 更新 UI
+        foreach (var tagVm in Tags)
+            if (values.TryGetValue(tagVm.TagName, out var val))
+                tagVm.UpdateValue(val);
+
+        // 更新图表
+        foreach (var kv in values)
+        {
+            var seriesKey = $"[{device.DeviceName}]{kv.Key}";
+            if (!_seriesMap.TryGetValue(seriesKey, out var series))
+            {
+                series = new LineSeries
+                {
+                    Title = seriesKey,
+                    Color = _colors[_colorIndex++ % _colors.Length],
+                    StrokeThickness = 1.5,
+                    MarkerType = MarkerType.None
+                };
+                _seriesMap[seriesKey] = series;
+                PlotModel.Series.Add(series);
+            }
+            series.Points.Add(new DataPoint(DateTimeAxis.ToDouble(now), kv.Value));
+            if (series.Points.Count > 300) series.Points.RemoveAt(0);
+        }
+        PlotModel.InvalidatePlot(true);
+
+        LogCount = (int.TryParse(LogCount, out var c) ? c : 0) + 1 + "";
+        RefreshDbStatus();
+    }
+
+    private void RefreshWritableTags()
+    {
+        WritableTags.Clear();
+        if (SelectedDevice != null)
+            foreach (var tag in SelectedDevice.TagConfigs)
+                if (tag.Name is "电机转速" or "阀门开度")
+                    WritableTags.Add(tag);
+        SelectedWriteTag = WritableTags.FirstOrDefault();
     }
 
     // ==================== 配置持久化 ====================
@@ -149,28 +214,7 @@ public partial class MainViewModel : ObservableObject
         _settings.IpAddress = IpAddress;
         _settings.ComPort = ComPort;
         _settings.BaudRate = BaudRate;
-        _settings.SelectedMode = SelectedMode;
-        _settings.OpcUaEndpointUrl = OpcUaEndpointUrl;
-        if (int.TryParse(LogIntervalText, out var v)) _settings.LogIntervalMs = v;
         _settings.Save();
-    }
-
-    partial void OnSelectedModeChanged(int value)
-    {
-        UpdateConnectBtnText();
-        SaveSettings();
-    }
-
-    private void UpdateConnectBtnText()
-    {
-        ConnectBtnText = SelectedMode switch
-        {
-            0 => "TCP 连接",
-            1 => "RTU 连接",
-            2 => "OPC UA 连接",
-            3 => "S7 连接",
-            _ => "连接"
-        };
     }
 
     // ==================== 命令 ====================
@@ -178,48 +222,53 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task Connect()
     {
-        if (IsConnected) { await DisconnectInternal(); return; }
+        if (SelectedDevice == null) return;
 
-        var driver = SelectedMode switch
+        if (SelectedDevice.IsConnected)
         {
-            0 or 1 => (IDeviceDriver)_modbusDriver,
-            2 => _opcUaDriver,
-            3 => _s7Driver,
-            _ => throw new InvalidOperationException("未知连接模式")
-        };
+            await SelectedDevice.DisconnectAsync();
+            RemoveDeviceTags(SelectedDevice);
+            return;
+        }
 
-        var parameters = SelectedMode switch
+        // 同步协议：UI 选的协议可能与设备配置的默认协议不同
+        SelectedDevice.SwitchProtocol(SelectedProtocol);
+
+        var parameters = SelectedProtocol switch
         {
-            0 => new Dictionary<string, object>
+            "ModbusTCP" => new Dictionary<string, object>
             {
-                { "Mode", "TCP" },
-                { "IpAddress", IpAddress }
+                { "Mode", "TCP" }, { "IpAddress", IpAddress }
             },
-            1 => new Dictionary<string, object>
+            "ModbusRTU" => new Dictionary<string, object>
             {
-                { "Mode", "RTU" },
-                { "ComPort", ComPort },
-                { "BaudRate", BaudRate },
-                { "Parity", Parity.None },
-                { "DataBits", 8 },
-                { "StopBits", StopBits.One }
+                { "Mode", "RTU" }, { "ComPort", ComPort }, { "BaudRate", BaudRate },
+                { "Parity", Parity.None }, { "DataBits", 8 }, { "StopBits", StopBits.One }
             },
-            2 => new Dictionary<string, object>
+            "OpcUa" => new Dictionary<string, object>
             {
                 { "EndpointUrl", OpcUaEndpointUrl },
                 { "Username", _settings.OpcUaUsername },
                 { "Password", _settings.OpcUaPassword }
             },
-            3 => new Dictionary<string, object>
+            "S7" => new Dictionary<string, object>
             {
-                { "IpAddress", IpAddress },
-                { "Rack", 0 },
-                { "Slot", 0 }
+                { "IpAddress", IpAddress }, { "Rack", 0 }, { "Slot", 0 }
             },
             _ => new Dictionary<string, object>()
         };
 
-        bool ok = await driver.ConnectAsync(parameters);
+        bool ok;
+        try
+        {
+            ok = await SelectedDevice.ConnectAsync(parameters);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"连接异常: {ex.Message}", "连接失败",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
 
         if (!ok)
         {
@@ -228,8 +277,23 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        _currentDriver = driver;
-        OnConnected();
+        AddDeviceTags(SelectedDevice);
+        RefreshDbStatus();
+    }
+
+    private void AddDeviceTags(DeviceViewModel device)
+    {
+        foreach (var tagVm in device.Tags)
+        {
+            tagVm.DisplayName = $"[{device.DeviceName}] {tagVm.TagName}";
+            Tags.Add(tagVm);
+        }
+    }
+
+    private void RemoveDeviceTags(DeviceViewModel device)
+    {
+        var toRemove = Tags.Where(t => t.DisplayName.StartsWith($"[{device.DeviceName}]")).ToList();
+        foreach (var t in toRemove) Tags.Remove(t);
     }
 
     [RelayCommand]
@@ -242,29 +306,14 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task WriteTag()
     {
-        if (_currentDriver == null || !_currentDriver.IsConnected)
-        {
-            WriteStatus = "未连接设备，无法写入";
-            return;
-        }
+        if (SelectedWriteTag == null) { WriteStatus = "请选择要写入的点位"; return; }
+        if (!double.TryParse(WriteValueText, out var value)) { WriteStatus = "请输入有效的数值"; return; }
+        if (SelectedDevice == null || !SelectedDevice.IsConnected) { WriteStatus = "设备未连接"; return; }
 
-        if (SelectedWriteTag == null)
-        {
-            WriteStatus = "请选择要写入的点位";
-            return;
-        }
-
-        if (!double.TryParse(WriteValueText, out var value))
-        {
-            WriteStatus = "请输入有效的数值";
-            return;
-        }
-
-        bool ok = await _currentDriver.WriteTagAsync(SelectedWriteTag, value);
-        if (ok)
-            WriteStatus = $"✓ 已写入 {SelectedWriteTag.Name} = {value} {SelectedWriteTag.Unit}";
-        else
-            WriteStatus = $"✗ 写入失败";
+        bool ok = await SelectedDevice.WriteTagAsync(SelectedWriteTag, value);
+        WriteStatus = ok
+            ? $"✓ 已写入 {SelectedWriteTag.Name} = {value} {SelectedWriteTag.Unit}"
+            : "✗ 写入失败";
     }
 
     [RelayCommand]
@@ -278,7 +327,6 @@ public partial class MainViewModel : ObservableObject
         RefreshDbStatus();
     }
 
-    /// <summary>导出历史数据为 CSV</summary>
     [RelayCommand]
     private void ExportCsv()
     {
@@ -297,11 +345,8 @@ public partial class MainViewModel : ObservableObject
         DbStatus = $"SQLite | {DbRecordCount:N0} 条 | {DbFileSizeKb:N0} KB";
     }
 
-    [RelayCommand]
-    private void RefreshPorts()
-    {
-        OnPropertyChanged(nameof(AvailablePorts));
-    }
+    [RelayCommand] private void RefreshPorts()
+        => OnPropertyChanged(nameof(AvailablePorts));
 
     [RelayCommand]
     private void OpenSerial()
@@ -312,186 +357,46 @@ public partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private void SendSerial()
-    {
-        _serialPort.SendString($"TEST:{DateTime.Now:HH:mm:ss}");
-    }
+        => _serialPort.SendString($"TEST:{DateTime.Now:HH:mm:ss}");
 
-    // ==================== 连接 / 断开 ====================
+    // ==================== 生命周期 ====================
 
-    private void OnConnected()
-    {
-        IsConnected = true;
-        StatusText = $"已连接 ({_currentDriver!.ConnectionType})";
-        ConnectBtnText = "断开";
-        RefreshDbStatus();
-        StartPipeline();
-    }
-
-    /// <summary>公开的断开方法，供窗口关闭时调用</summary>
     public async Task ShutdownAsync()
     {
-        await DisconnectInternal();
+        foreach (var dev in Devices)
+            await dev.DisconnectAsync();
         _serialPort.Dispose();
-        _modbusDriver.Dispose();
-        _opcUaDriver.Dispose();
-        _s7Driver.Dispose();
+        foreach (var dev in Devices)
+            dev.Dispose();
         _logger?.Dispose();
     }
+}
 
-    private async Task DisconnectInternal()
+// ==================== DeviceConfig 加载器 ====================
+
+public static class DeviceConfigLoader
+{
+    private const string DefaultPath = "devices.json";
+
+    public static List<DeviceConfig> Load(string? path = null)
     {
-        _timerCts?.Cancel();
-        _timerCts?.Dispose();
-        _timerCts = null;
+        path ??= DefaultPath;
+        if (!File.Exists(path))
+            return new List<DeviceConfig>();
 
-        if (_pipeline != null)
-        {
-            await _pipeline.StopAsync();
-            _pipeline.Dispose();
-            _pipeline = null;
-        }
-
-        _currentDriver?.Disconnect();
-        _currentDriver = null;
-
-        IsConnected = false;
-        StatusText = "未连接";
-        UpdateConnectBtnText();
-        PipelineStatus = "未启动";
-        QueueSize = 0;
-    }
-
-    // ==================== 多线程管道 ====================
-
-    private void StartPipeline()
-    {
-        _pipeline?.Dispose();
-        _pipeline = new DataPipeline<Dictionary<string, double>>();
-        var driver = _currentDriver!;
-
-        _pipeline.OnLog += msg => Application.Current.Dispatcher.Invoke(() =>
-        {
-            Logs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] {msg}");
-            if (Logs.Count > 100) Logs.RemoveAt(Logs.Count - 1);
-        });
-
-        _pipeline.OnError += ex => Application.Current.Dispatcher.Invoke(() =>
-            Logs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] 错误: {ex.Message}"));
-
-        int interval = int.TryParse(LogIntervalText, out var v) ? Math.Max(v, 200) : 1000;
-
-        _pipeline.Start(
-            producerFunc: async (ct) =>
-            {
-                try
-                {
-                    return await driver.ReadAllTagsAsync(_tagConfigs);
-                }
-                catch (Exception ex) when (!ct.IsCancellationRequested)
-                {
-                    // 连接断开，触发重连
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        Logs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] 连接断开: {ex.Message}");
-                        StatusText = "重连中...";
-                        IsConnected = false;
-                    });
-
-                    // 最多重试 5 次，间隔递增
-                    for (int attempt = 1; attempt <= 5; attempt++)
-                    {
-                        if (ct.IsCancellationRequested) break;
-
-                        Application.Current.Dispatcher.Invoke(() =>
-                            StatusText = $"重连中... (第 {attempt} 次)");
-
-                        await Task.Delay(attempt * 2000, ct); // 2s, 4s, 6s, 8s, 10s
-
-                        bool ok = await driver.ReconnectAsync();
-                        if (ok)
-                        {
-                            Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                IsConnected = true;
-                                StatusText = $"已连接 ({driver.ConnectionType})";
-                                Logs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] 重连成功 (第 {attempt} 次)");
-                            });
-                            return new Dictionary<string, double>(); // 返回空数据，下轮正常读
-                        }
-                    }
-
-                    // 5 次都失败
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        StatusText = "重连失败，请手动连接";
-                        Logs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] 重连失败，已放弃");
-                    });
-                    throw; // 抛出异常，让管道停止
-                }
-            },
-            consumerAction: (values) =>
-            {
-                _alarm.CheckLimits(_tagConfigs, values);
-                Logger.InsertBatch(values);
-            },
-            produceIntervalMs: interval,
-            boundedCapacity: 100
-        );
-
-        PipelineStatus = "运行中（生产者-消费者模式）";
-        _timerCts?.Cancel();
-        _timerCts = new CancellationTokenSource();
-        _ = UiUpdateLoop(_timerCts.Token);
-    }
-
-    private async Task UiUpdateLoop(CancellationToken ct)
-    {
-        while (!ct.IsCancellationRequested)
-        {
-            try
-            {
-                await Task.Delay(200, ct);
-
-                if (_pipeline != null)
-                {
-                    QueueSize = _pipeline.QueueCount;
-                    PipelineStatus = $"运行中 | 队列: {QueueSize}/100 | Producer → Consumer → UI";
-                }
-
-                while (_pipeline?.ResultQueue.TryDequeue(out var values) == true)
-                {
-                    var now = DateTime.Now;
-                    await Application.Current.Dispatcher.InvokeAsync(() =>
-                    {
-                        foreach (var tagVm in Tags)
-                            if (values.TryGetValue(tagVm.Name, out var val))
-                                tagVm.UpdateValue(val);
-
-                        foreach (var kv in values)
-                        {
-                            if (_seriesMap.TryGetValue(kv.Key, out var series))
-                            {
-                                series.Points.Add(new DataPoint(DateTimeAxis.ToDouble(now), kv.Value));
-                                if (series.Points.Count > 300) series.Points.RemoveAt(0);
-                            }
-                        }
-                        PlotModel.InvalidatePlot(true);
-                    });
-
-                    LogCount = (int.TryParse(LogCount, out var c) ? c : 0) + 1 + "";
-                    RefreshDbStatus();
-                }
-            }
-            catch (OperationCanceledException) { break; }
-        }
+        var json = File.ReadAllText(path);
+        return JsonSerializer.Deserialize<List<DeviceConfig>>(json) ?? new();
     }
 }
+
+// ==================== TagViewModel ====================
 
 public partial class TagViewModel : ObservableObject
 {
     private readonly TagConfig _config;
-    public string Name { get; set; }
+    public string TagName { get; set; }
     public string Unit { get; set; }
+    public string DisplayName { get; set; } = "";  // UI 显示用（含设备名前缀）
 
     [ObservableProperty] private double _value;
     [ObservableProperty] private string _displayValue = "--";
@@ -501,7 +406,7 @@ public partial class TagViewModel : ObservableObject
     public TagViewModel(TagConfig config)
     {
         _config = config;
-        Name = config.Name;
+        TagName = config.Name;
         Unit = config.Unit;
     }
 

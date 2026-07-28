@@ -61,8 +61,9 @@ public class ModbusService : IDeviceDriver
             ConnectionType = $"TCP ({ip}:{port})";
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[Modbus TCP] 连接失败 ({ip}:{port}): {ex.Message}");
             IsConnected = false;
             return false;
         }
@@ -89,8 +90,9 @@ public class ModbusService : IDeviceDriver
             ConnectionType = $"RTU ({portName},{baudRate},ID={slaveId})";
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[Modbus RTU] 连接失败 ({portName},{baudRate}): {ex.Message}");
             IsConnected = false;
             return false;
         }

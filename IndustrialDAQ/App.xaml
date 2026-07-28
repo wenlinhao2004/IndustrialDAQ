@@ -5,5 +5,6 @@
     <Application.Resources>
         <conv:BoolToColorConverter x:Key="BoolToColorConverter"/>
         <conv:BoolToAlarmBgConverter x:Key="BoolToAlarmBgConverter"/>
+        <conv:InverseBoolConverter x:Key="InverseBoolConverter"/>
     </Application.Resources>
 </Application>
