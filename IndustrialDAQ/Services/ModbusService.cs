@@ -13,13 +13,10 @@ public class ModbusService : IDeviceDriver
 {
     private object? _transport;              // TcpClient 或 SerialPort
     private IModbusMaster? _master;
-    private bool _simulationMode;
     private byte _slaveId = 1;               // RTU 从站地址
-    private readonly Random _random = new();
 
     public bool IsConnected { get; private set; }
-    public bool IsSimulation => _simulationMode;
-    public string ConnectionType { get; private set; } = "无"; // "TCP" / "RTU" / "Simulation"
+    public string ConnectionType { get; private set; } = "无"; // "TCP" / "RTU"
 
     // ==================== 统一连接入口 (IDeviceDriver) ====================
 
@@ -58,7 +55,6 @@ public class ModbusService : IDeviceDriver
             await client.ConnectAsync(ip, port);
             _transport = client;
             _master = ModbusIpMaster.CreateIp(client);
-            _simulationMode = false;
             IsConnected = true;
             ConnectionType = $"TCP ({ip}:{port})";
             return true;
@@ -87,7 +83,6 @@ public class ModbusService : IDeviceDriver
             _transport = serialPort;
             _master = ModbusSerialMaster.CreateRtu(new SerialPortAdapter(serialPort));
             _slaveId = slaveId;
-            _simulationMode = false;
             IsConnected = true;
             ConnectionType = $"RTU ({portName},{baudRate},ID={slaveId})";
             return true;
@@ -97,16 +92,6 @@ public class ModbusService : IDeviceDriver
             IsConnected = false;
             return false;
         }
-    }
-
-    // ==================== 模拟模式 ====================
-
-    public void EnableSimulation()
-    {
-        Disconnect();
-        _simulationMode = true;
-        IsConnected = true;
-        ConnectionType = "Modbus (Simulation)";
     }
 
     // ==================== 断开 ====================
@@ -127,7 +112,6 @@ public class ModbusService : IDeviceDriver
                 break;
         }
         _transport = null;
-        _simulationMode = false;
         IsConnected = false;
         ConnectionType = "无";
     }
@@ -137,9 +121,6 @@ public class ModbusService : IDeviceDriver
     /// <summary>读取保持寄存器</summary>
     private async Task<ushort[]> ReadHoldingRegistersAsync(ushort startAddress, ushort count, byte slaveId)
     {
-        if (_simulationMode)
-            return Enumerable.Range(0, count).Select(_ => (ushort)_random.Next(0, 65535)).ToArray();
-
         if (_master == null)
             throw new InvalidOperationException("未连接到设备");
 

@@ -16,11 +16,8 @@ namespace IndustrialDAQ.Services;
 public class S7Driver : IDeviceDriver
 {
     private Plc? _plc;
-    private bool _simulationMode;
-    private readonly Random _random = new();
 
     public bool IsConnected { get; private set; }
-    public bool IsSimulation => _simulationMode;
     public string ConnectionType { get; private set; } = "无";
 
     // ==================== 连接 (IDeviceDriver) ====================
@@ -64,7 +61,6 @@ public class S7Driver : IDeviceDriver
                 return false;
             }
 
-            _simulationMode = false;
             IsConnected = true;
             ConnectionType = $"S7 ({ip}, Rack={rack}, Slot={slot})";
             return true;
@@ -84,19 +80,8 @@ public class S7Driver : IDeviceDriver
     {
         _plc?.Close();
         _plc = null;
-        _simulationMode = false;
         IsConnected = false;
         ConnectionType = "无";
-    }
-
-    // ==================== 模拟模式 ====================
-
-    public void EnableSimulation()
-    {
-        Disconnect();
-        _simulationMode = true;
-        IsConnected = true;
-        ConnectionType = "S7 (Simulation)";
     }
 
     // ==================== 数据读取 ====================
@@ -104,9 +89,6 @@ public class S7Driver : IDeviceDriver
     /// <summary>批量读取 S7 DB 块中的点位</summary>
     public async Task<Dictionary<string, double>> ReadAllTagsAsync(List<TagConfig> tags)
     {
-        if (_simulationMode)
-            return SimulateRead(tags);
-
         if (_plc == null || !_plc.IsConnected)
             throw new InvalidOperationException("S7 PLC 未连接");
 
@@ -135,27 +117,6 @@ public class S7Driver : IDeviceDriver
             }
             return result;
         });
-    }
-
-    // ==================== 模拟数据生成 ====================
-
-    private Dictionary<string, double> SimulateRead(List<TagConfig> tags)
-    {
-        var result = new Dictionary<string, double>();
-        foreach (var tag in tags)
-        {
-            double raw = tag.S7DataType switch
-            {
-                "BOOL" => _random.Next(0, 2),                         // 0 或 1
-                "BYTE" => _random.Next(0, 256),                        // 0 ~ 255
-                "INT" => _random.Next(-32768, 32768),                  // -32768 ~ 32767
-                "DINT" => _random.Next(-100000, 100000),               // 模拟范围
-                "REAL" => Math.Round(_random.NextDouble() * 100, 2),  // 0.00 ~ 100.00
-                _ => Math.Round(_random.NextDouble() * 100, 2)
-            };
-            result[tag.Name] = raw * tag.Scale + tag.Offset;
-        }
-        return result;
     }
 
     // ==================== 字节操作 ====================

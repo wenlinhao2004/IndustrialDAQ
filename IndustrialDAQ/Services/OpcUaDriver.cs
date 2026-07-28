@@ -18,11 +18,8 @@ public class OpcUaDriver : IDeviceDriver
 {
     private Session? _session;
     private ApplicationConfiguration? _appConfig;
-    private bool _simulationMode;
-    private readonly Random _random = new();
 
     public bool IsConnected { get; private set; }
-    public bool IsSimulation => _simulationMode;
     public string ConnectionType { get; private set; } = "无";
 
     /// <summary>
@@ -83,7 +80,6 @@ public class OpcUaDriver : IDeviceDriver
                 identity: identity,
                 preferredLocales: null);
 
-            _simulationMode = false;
             IsConnected = true;
             ConnectionType = $"OPC UA ({endpointUrl})";
             return true;
@@ -99,9 +95,6 @@ public class OpcUaDriver : IDeviceDriver
     /// <summary>批量读取 OPC UA 节点</summary>
     public async Task<Dictionary<string, double>> ReadAllTagsAsync(List<TagConfig> tags)
     {
-        if (_simulationMode)
-            return tags.ToDictionary(t => t.Name, _ => _random.NextDouble() * 100);
-
         if (_session == null || !_session.Connected)
             throw new InvalidOperationException("OPC UA 会话未连接");
 
@@ -151,20 +144,11 @@ public class OpcUaDriver : IDeviceDriver
         return result;
     }
 
-    public void EnableSimulation()
-    {
-        Disconnect();
-        _simulationMode = true;
-        IsConnected = true;
-        ConnectionType = "OPC UA (Simulation)";
-    }
-
     public void Disconnect()
     {
         _session?.Close();
         _session?.Dispose();
         _session = null;
-        _simulationMode = false;
         IsConnected = false;
         ConnectionType = "无";
     }

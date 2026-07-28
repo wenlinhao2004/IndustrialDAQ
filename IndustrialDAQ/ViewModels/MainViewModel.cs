@@ -207,24 +207,12 @@ public partial class MainViewModel : ObservableObject
 
         if (!ok)
         {
-            var result = MessageBox.Show("无法连接设备，是否切换到模拟模式？", "连接失败",
-                MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (result == MessageBoxResult.No) return;
-            driver.EnableSimulation();
+            MessageBox.Show("无法连接设备，请检查连接参数后重试。", "连接失败",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
         }
 
         _currentDriver = driver;
-        OnConnected();
-    }
-
-    [RelayCommand]
-    private void Simulation()
-    {
-        _ = DisconnectInternal();
-
-        // 模拟模式默认使用 Modbus 驱动
-        _modbusDriver.EnableSimulation();
-        _currentDriver = _modbusDriver;
         OnConnected();
     }
 
