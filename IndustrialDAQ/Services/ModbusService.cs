@@ -129,50 +129,159 @@ public class ModbusService : IDeviceDriver
         return await ConnectAsync(_lastParams);
     }
 
-    // ==================== 数据读取 ====================
+    // ==================== 单点读取（功能码 + 数据转换 + 异常保护） ====================
 
-    /// <summary>读取保持寄存器</summary>
-    private async Task<ushort[]> ReadHoldingRegistersAsync(ushort startAddress, ushort count, byte slaveId)
+    /// <summary>读保持寄存器 (功能码 03)，自动做 Scale/Offset 换算，失败返回 NaN</summary>
+    public async Task<double> ReadHoldingRegisterAsync(TagConfig tag)
     {
-        if (_master == null)
-            throw new InvalidOperationException("未连接到设备");
-
-        return await _master.ReadHoldingRegistersAsync(slaveId, startAddress, count);
+        try
+        {
+            var raw = (await _master!.ReadHoldingRegistersAsync(_slaveId, tag.Address, 1))[0];
+            return raw * tag.Scale + tag.Offset;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Modbus HR] 读取失败 '{tag.Name}'(地址{tag.Address}): {ex.Message}");
+            return double.NaN;
+        }
     }
 
-    /// <summary>批量读取所有配置点位</summary>
+    /// <summary>读输入寄存器 (功能码 04)，自动做 Scale/Offset 换算，失败返回 NaN</summary>
+    public async Task<double> ReadInputRegisterAsync(TagConfig tag)
+    {
+        try
+        {
+            var raw = (await _master!.ReadInputRegistersAsync(_slaveId, tag.Address, 1))[0];
+            return raw * tag.Scale + tag.Offset;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Modbus IR] 读取失败 '{tag.Name}'(地址{tag.Address}): {ex.Message}");
+            return double.NaN;
+        }
+    }
+
+    /// <summary>读线圈 (功能码 01)，bool 转 0.0/1.0，失败返回 NaN</summary>
+    public async Task<double> ReadCoilAsync(TagConfig tag)
+    {
+        try
+        {
+            var raw = (await _master!.ReadCoilsAsync(_slaveId, tag.Address, 1))[0];
+            return raw ? 1.0 : 0.0;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Modbus Coil] 读取失败 '{tag.Name}'(地址{tag.Address}): {ex.Message}");
+            return double.NaN;
+        }
+    }
+
+    /// <summary>读离散输入 (功能码 02)，bool 转 0.0/1.0，失败返回 NaN</summary>
+    public async Task<double> ReadDiscreteInputAsync(TagConfig tag)
+    {
+        try
+        {
+            var raw = (await _master!.ReadInputsAsync(_slaveId, tag.Address, 1))[0];
+            return raw ? 1.0 : 0.0;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Modbus DI] 读取失败 '{tag.Name}'(地址{tag.Address}): {ex.Message}");
+            return double.NaN;
+        }
+    }
+
+    // ==================== 批量采集 ====================
+
+    /// <summary>批量读取全部点位，按 RegisterType 分发到对应读方法</summary>
     public async Task<Dictionary<string, double>> ReadAllTagsAsync(List<TagConfig> tags)
     {
-        if (tags.Count == 0) return new Dictionary<string, double>();
-
-        var minAddr = tags.Min(t => t.Address);
-        var maxAddr = tags.Max(t => t.Address);
-        ushort count = (ushort)(maxAddr - minAddr + 1);
-
-        var rawValues = await ReadHoldingRegistersAsync(minAddr, count, _slaveId);
         var result = new Dictionary<string, double>();
-
         foreach (var tag in tags)
         {
-            int index = tag.Address - minAddr;
-            if (index < rawValues.Length)
-                result[tag.Name] = rawValues[index] * tag.Scale + tag.Offset;
+            result[tag.Name] = tag.RegisterType switch
+            {
+                "HR"   => await ReadHoldingRegisterAsync(tag),
+                "Coil" => await ReadCoilAsync(tag),
+                "DI"   => await ReadDiscreteInputAsync(tag),
+                "IR"   => await ReadInputRegisterAsync(tag),
+                _      => double.NaN
+            };
         }
-
         return result;
     }
 
-    // ==================== 数据写入 ====================
+    // ==================== 线圈写入 ====================
 
     /// <summary>
-    /// 写入单个保持寄存器
-    /// 工程值 → 原始值: rawValue = (value - Offset) / Scale
+    /// 写单个线圈 (功能码 05)
+    /// </summary>
+    public async Task<bool> WriteCoilAsync(ushort address, bool value, byte slaveId)
+    {
+        if (_master == null) throw new InvalidOperationException("未连接到设备");
+        try
+        {
+            await _master.WriteSingleCoilAsync(slaveId, address, value);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Modbus] 写线圈失败 地址={address}: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 写多个线圈 (功能码 15)
+    /// </summary>
+    public async Task<bool> WriteMultipleCoilsAsync(ushort address, bool[] values, byte slaveId)
+    {
+        if (_master == null) throw new InvalidOperationException("未连接到设备");
+        try
+        {
+            await _master.WriteMultipleCoilsAsync(slaveId, address, values);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Modbus] 写多线圈失败 地址={address}: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 写线圈并回读验证 (功能码 05 + 01)
+    /// 流程：写命令 → 等 50ms → 读回 → 比对
+    /// </summary>
+    public async Task<bool> WriteCoilAndVerifyAsync(ushort address, bool value, byte slaveId)
+    {
+        try
+        {
+            if (!await WriteCoilAsync(address, value, slaveId)) return false;
+            await Task.Delay(50);
+            var actual = (await _master!.ReadCoilsAsync(slaveId, address, 1))[0];
+            if (actual == value) return true;
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[Modbus] 线圈验证失败: 地址={address}, 期望={value}, 实际={actual}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Modbus] 线圈操作失败 地址={address}: {ex.Message}");
+            return false;
+        }
+    }
+
+    // ==================== 寄存器写入 ====================
+
+    /// <summary>
+    /// 写入单个保持寄存器 (功能码 06)
+    /// 自动做 工程值 → 原始值 换算：rawValue = (value - Offset) / Scale
     /// </summary>
     public async Task<bool> WriteTagAsync(TagConfig tag, double value)
     {
-        if (_master == null)
-            throw new InvalidOperationException("未连接到设备");
-
+        if (_master == null) throw new InvalidOperationException("未连接到设备");
         try
         {
             var rawValue = (ushort)Math.Round((value - tag.Offset) / tag.Scale);
@@ -182,6 +291,24 @@ public class ModbusService : IDeviceDriver
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Modbus] 写入失败 '{tag.Name}': {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 写多个保持寄存器 (功能码 16)
+    /// </summary>
+    public async Task<bool> WriteMultipleRegistersAsync(ushort address, ushort[] values, byte slaveId)
+    {
+        if (_master == null) throw new InvalidOperationException("未连接到设备");
+        try
+        {
+            await _master.WriteMultipleRegistersAsync(slaveId, address, values);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Modbus] 多寄存器写入失败 地址={address}: {ex.Message}");
             return false;
         }
     }

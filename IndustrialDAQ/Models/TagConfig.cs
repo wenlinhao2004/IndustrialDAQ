@@ -6,7 +6,8 @@
 public class TagConfig
 {
     public string Name { get; set; } = string.Empty;       // 点位名称，如 "主电机温度"
-    public ushort Address { get; set; }                     // Modbus 保持寄存器地址
+    public ushort Address { get; set; }                     // Modbus 区内地址 (从 0 开始)
+    public string RegisterType { get; set; } = string.Empty; // Modbus 数据区: HR / IR / Coil / DI
     public string NodeId { get; set; } = string.Empty;      // OPC UA NodeId (如 "ns=2;s=Temperature")
     public int DbNumber { get; set; } = 1;                 // S7: DB 块编号
     public int ByteOffset { get; set; } = 0;               // S7: DB 块内字节偏移
